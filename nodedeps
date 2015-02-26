@@ -1,0 +1,74 @@
+#! /usr/bin/perl
+
+use File::Basename;
+
+sub filedeps {
+    # Take the name of a file as the only arg, and return an array
+    # of all 'require' dependencies listed in that file.  Does not
+    # recurse into dependency files -- just returns a flat list
+    # of dependencies mentioned in the given file.
+    my $file = shift;
+    my @deps = ();
+    open(IN, "<$file");
+    while (<IN>) {
+        if ( ($name) = /require\(['"]([^'"]+)['"]\)/ ) {
+            push(@deps, $name);
+        }
+    }
+    close(IN);
+    return @deps;
+}
+
+sub parsepath {
+    my $path = shift;
+    my ($name,$dir,$suffix) = fileparse($path);
+    $dir =~ s|/$||;
+    return ($dir, $name);
+}
+
+sub resolverel {
+    # Takes two strings representing directories, the 2nd one of which is a relative path.
+    # Returns a new string representing the (non-relative) path of the 2nd directory,
+    # relative to the first.
+    my $a = shift;
+    my $b = shift;
+    $a =~ s|/$||;
+    $b =~ s|/$||;    
+    my @a = split('/', $a);
+    my @b = split('/', $b);
+    while (@b > 0) {
+        if ($b[0] eq ".") {
+            shift @b; # remove 1st item from @b
+        } elsif ($b[0] eq ".." && @a > 0) {
+            shift @b; # remove 1st item from @b
+            pop @a;   # remove last item from @a
+        } else {
+            last;
+        }
+    }
+    return join("/", @a,@b);
+}
+
+$done = {};
+
+sub ndeps {
+    my $prefix = shift;
+    my $file = shift;
+    my ($dir,$name) = parsepath($file);
+    if ($done->{$file}) {
+        printf("%s! %s\n", $prefix, $file);
+    } else {
+        $done->{$file} = 1;
+        printf("%s%s:\n", $prefix, $file);
+        my @deps = filedeps($file);
+        foreach $dep (@deps) {
+            my ($ddir,$dname) = parsepath($dep);
+            my $dpath = resolverel($dir,$ddir) . "/" . $dname;
+            ndeps($prefix . "  ", $dpath);
+        }
+    }
+}
+
+my $file = shift;
+
+ndeps("", $file);
